@@ -8,21 +8,26 @@
 #include "Game/Game.h"
 #include "Resources/ResourceManager.h"
 #include "Renderer/Renderer.h"
+#include "Physics/PhysicsEngine.h"
 
-glm::ivec2 g_windowSize(640, 480);
-Game g_game(g_windowSize);
+
+static constexpr unsigned int SCALE = 3;
+static constexpr unsigned int BLOCK_SIZE = 16;
+
+glm::uvec2 g_windowSize(SCALE * 16 * BLOCK_SIZE, SCALE * 15 * BLOCK_SIZE);
+std::unique_ptr<Game> g_game = std::make_unique<Game>(g_windowSize);
 
 void glfwWindowSizeCallback(GLFWwindow* window, int width, int height) {
     g_windowSize.x = width;
     g_windowSize.y = height;
-    RenderEngine::Renderer::setViewport(g_windowSize.x, g_windowSize.y);
+    g_game->setWindowSize(g_windowSize);
 }
 
 void glfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mode) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
     }
-    g_game.setKey(key, action);
+    g_game->setKey(key, action);
 }
 
 int main(int argc, char** argv)
@@ -61,32 +66,39 @@ int main(int argc, char** argv)
     std::cout << "OpenGL Version " << RenderEngine::Renderer::getVersionStr() << std::endl;
 
     RenderEngine::Renderer::setClearColor(0, 0, 0, 1);
+    RenderEngine::Renderer::setDepthTest(true);
 
     {
         ResourceManager::setExecutablePath(argv[0]);
-        g_game.init();
+        Physics::PhysicsEngine::init();
+        g_game->init();
+
+        //glfwSetWindowSize(window, static_cast<int>(3 * g_game->getCurrentWidth()), static_cast<int>(3 * g_game->getCurrentHeight()));
 
         auto lastTime = std::chrono::high_resolution_clock::now();
 
         /* Loop until the user closes the window */
         while (!glfwWindowShouldClose(window))
         {
+            /* Poll for and process events */
+            glfwPollEvents();
+
             auto currentTime = std::chrono::high_resolution_clock::now();
-            uint64_t duration = std::chrono::duration_cast <std::chrono::nanoseconds> (currentTime - lastTime).count();
+            double duration = std::chrono::duration<double, std::milli> (currentTime - lastTime).count();
             lastTime = currentTime;
-            g_game.update(duration);
+            g_game->update(duration);
+            Physics::PhysicsEngine::update(duration);
 
             /* Render here */
             RenderEngine::Renderer::clear();
 
-            g_game.render();
+            g_game->render();
 
             /* Swap front and back buffers */
             glfwSwapBuffers(window);
-
-            /* Poll for and process events */
-            glfwPollEvents();
         }
+        Physics::PhysicsEngine::terminate();
+        g_game = nullptr;
         ResourceManager::unloadResources();
     }
 

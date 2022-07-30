@@ -11,15 +11,10 @@ namespace RenderEngine {
 
 	Sprite::Sprite(const std::shared_ptr<Texture2D> texture,
 		const std::string initialSubTexture,
-		const std::shared_ptr<ShaderProgram> shaderProgram,
-		const glm::vec2& position,
-		const glm::vec2& size,
-		const float rotation) 
+		const std::shared_ptr<ShaderProgram> shaderProgram) 
 		: m_texture(std::move(texture))
 		, m_shaderProgram(std::move(shaderProgram))
-		, m_position(position)
-		, m_size(size)
-		, m_rotation(rotation)
+		, m_lastFrameID(0)
 	{
 		const GLfloat vertexCoords[] = {
 			// X Y
@@ -63,18 +58,35 @@ namespace RenderEngine {
 	Sprite::~Sprite() {
 	}
 
-	void Sprite::render() const {
+	void Sprite::render(const glm::vec2& position, const glm::vec2& size, const float rotation, const float layer, const size_t frameID) const {
+		if (m_lastFrameID != frameID) {
+			m_lastFrameID = frameID;
+
+			const FrameDescription& currentFrameDescription = m_framesDescriptions[frameID];
+
+			const GLfloat textureCoords[] = {
+				// U V
+				currentFrameDescription.leftBottomUV.x, currentFrameDescription.leftBottomUV.y,
+				currentFrameDescription.leftBottomUV.x, currentFrameDescription.rightTopUV.y,
+				currentFrameDescription.rightTopUV.x, currentFrameDescription.rightTopUV.y,
+				currentFrameDescription.rightTopUV.x, currentFrameDescription.leftBottomUV.y,
+			};
+
+			m_textureCoordsBuffer.update(textureCoords, 2 * 4 * sizeof(GLfloat));
+		}
+
 		m_shaderProgram->use();
 
 		glm::mat4 model(1.f);
 
-		model = glm::translate(model, glm::vec3(m_position, 0.f));
-		model = glm::translate(model, glm::vec3(0.5f * m_size.x, 0.5f * m_size.y, 0.f));
-		model = glm::rotate(model, glm::radians(m_rotation), glm::vec3(0.f, 0.f, 1.f));
-		model = glm::translate(model, glm::vec3(-0.5f * m_size.x, -0.5f * m_size.y, 0.f));
-		model = glm::scale(model, glm::vec3(m_size, 1.f));
+		model = glm::translate(model, glm::vec3(position, 0.f));
+		model = glm::translate(model, glm::vec3(0.5f * size.x, 0.5f * size.y, 0.f));
+		model = glm::rotate(model, glm::radians(rotation), glm::vec3(0.f, 0.f, 1.f));
+		model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, 0.f));
+		model = glm::scale(model, glm::vec3(size, 1.f));
 
 		m_shaderProgram->setMatrix4("modelMat", model);
+		m_shaderProgram->setFloat("layer", layer);
 
 		glActiveTexture(GL_TEXTURE0);
 		m_texture->bind();
@@ -82,16 +94,15 @@ namespace RenderEngine {
 		Renderer::draw(m_vertexArray, m_indexBuffer, *m_shaderProgram);
 	}
 
-	void Sprite::setPosition(const glm::vec2& position) {
-		m_position = position;
+	void Sprite::insertFrames(std::vector<FrameDescription> framesDescriptions) {
+		m_framesDescriptions = std::move(framesDescriptions);
 	}
 
-	void Sprite::setSize(const glm::vec2& size) {
-		m_size = size;
+	double Sprite::getFrameDuration(const size_t frameID) const {
+		return m_framesDescriptions[frameID].duration;
 	}
 
-	void Sprite::setRotation(const float rotation) {
-		m_rotation = rotation;
+	size_t Sprite::getFramesCount() const {
+		return m_framesDescriptions.size();
 	}
-
 }
